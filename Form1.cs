@@ -190,6 +190,35 @@ namespace TengaiXMLApp
             DrawSelectedPoint(g, ptRightStart, "右起", Brushes.Blue, scale, screenCenterX, screenCenterY);
             DrawSelectedPoint(g, ptLeftEnd, "左終", Brushes.Green, scale, screenCenterX, screenCenterY);
             DrawSelectedPoint(g, ptRightEnd, "右終", Brushes.Orange, scale, screenCenterX, screenCenterY);
+
+            // --- ★ 本格方位マーク（北＝上）の描画 ---
+            int cX = 40; // 左端からのX距離
+            int cY = 50; // 上端からのY距離
+            int r = 18;  // 円の半径
+
+            using (Pen pLine = new Pen(Color.Cyan, 1.5f))      // 十字・外枠（水色）
+            using (Pen pArrow = new Pen(Color.Red, 2f))        // 北矢印（赤）
+            using (Brush bN = new SolidBrush(Color.Red))       // 「N」文字色
+            using (Brush bFill = new SolidBrush(Color.Red))     // 塗りつぶし
+            using (Font font = new Font("Arial", 10, FontStyle.Bold))
+            {
+                // 1. 外枠円と十字線
+                g.DrawEllipse(pLine, cX - r, cY - r, r * 2, r * 2);
+                g.DrawLine(pLine, cX, cY - r - 3, cX, cY + r + 3);       // 南北線
+                g.DrawLine(pLine, cX - r - 3, cY, cX + r + 3, cY);       // 東西線
+
+                // 2. 上向き（北）の塗りつぶし半矢印
+                Point[] arrowPoly = new Point[]
+                {
+                    new Point(cX, cY - r - 8),       // 矢印先端（上）
+                    new Point(cX - 5, cY),           // 左角
+                    new Point(cX, cY)                // 中心
+                };
+                g.FillPolygon(bFill, arrowPoly);
+
+                // 3. 「N」文字
+                g.DrawString("N", font, bN, cX - 6, cY - r - 24);
+            }
         }
 
         private void DrawSelectedPoint(Graphics g, Point3D p, string label, Brush brush, double scale, float screenCenterX, float screenCenterY)

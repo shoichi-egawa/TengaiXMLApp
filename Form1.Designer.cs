@@ -216,7 +216,7 @@
             this.Controls.Add(this.label1);
             this.Controls.Add(this.lblFilePath);
             this.Controls.Add(this.btnSelectFile);
-            this.MinimumSize = new System.Drawing.Size(500, 300);
+            this.MinimumSize = new System.Drawing.Size(600, 300);
             this.Name = "Form1";
             this.Text = "いきなり 転圧層拡張増殖";
             ((System.ComponentModel.ISupportInitialize)(this.picPreview)).EndInit();

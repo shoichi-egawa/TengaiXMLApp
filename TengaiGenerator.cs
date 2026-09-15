@@ -191,21 +191,22 @@ namespace TengaiXMLApp
                 CalculateStations(centerLine);
             }
 
-            bool is3Point = centerLine.Count > 1 && centerLine.Count == leftLine.Count && centerLine.Count == rightLine.Count;
+            // 点数一致チェック（候補フラグ）
+            bool hasCenterLine = centerLine.Count > 1 && centerLine.Count == leftLine.Count && centerLine.Count == rightLine.Count;
 
             // 5. 点数一致チェック
-            bool isValid = is3Point ?
+            bool isValid = hasCenterLine ?
                 (leftLine.Count == rightLine.Count && leftLine.Count == centerLine.Count && leftLine.Count > 1) :
                 (leftLine.Count == rightLine.Count && leftLine.Count > 1);
 
             if (!isValid)
             {
-                double errDist = DetectErrorStation(leftLine, rightLine, is3Point ? centerLine : null);
+                double errDist = DetectErrorStation(leftLine, rightLine, hasCenterLine ? centerLine : null);
 
                 string msg = $"【点数不一致エラー】\n\n" +
                              $"・左ライン: {leftLine.Count} 点\n" +
                              $"・右ライン: {rightLine.Count} 点\n";
-                if (is3Point) msg += $"・中ライン: {centerLine.Count} 点\n";
+                if (hasCenterLine) msg += $"・中ライン: {centerLine.Count} 点\n";
 
                 msg += $"\n起点から約 {errDist:F2} m 付近で構成が不一致です。\n確認してください。";
 
@@ -220,6 +221,37 @@ namespace TengaiXMLApp
             List<List<Point3D>> sections = new List<List<Point3D>>();
 
             int newId = 1;
+
+            // ★ 全断面で「勾配差 0.1% (0.001)」以上があるか判定（両勾配判定）
+            bool is3Point = false;
+            if (hasCenterLine)
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    Point3D pL = leftLine[i];
+                    Point3D pR = rightLine[i];
+                    Point3D pC = centerLine[i];
+
+                    double dLC = GetDist(pL, pC);
+                    double dCR = GetDist(pR, pC);
+
+                    if (dLC > 0 && dCR > 0)
+                    {
+                        double slopeL = (pL.Z - pC.Z) / dLC;
+                        double slopeR = (pR.Z - pC.Z) / dCR;
+
+                        if (Math.Abs(slopeL - (-slopeR)) >= 0.001)
+                        {
+                            is3Point = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // ★ 内カーブ破綻（進行方向逆転・交差）検知フラグ
+            bool hasIntersectionWarning = false;
+            double warningStation = 0.0;
 
             for (int i = 0; i < count; i++)
             {
@@ -255,8 +287,58 @@ namespace TengaiXMLApp
                     sec.Add(new Point3D { Id = newId++, X = pR.X + nx * offsetRight, Y = pR.Y + ny * offsetRight, Z = pR.Z + slopeR * offsetRight });
                 }
 
+                // ★ 内カーブでのベクトル逆転チェック（前断面との位置関係を判定）
+                if (i > 0 && sections.Count > 0)
+                {
+                    var prevSec = sections[sections.Count - 1];
+
+                    // 元データの進行ベクトル
+                    double origDx = leftLine[i].X - leftLine[i - 1].X;
+                    double origDy = leftLine[i].Y - leftLine[i - 1].Y;
+
+                    // 拡張後の進行ベクトル（左側・右側）
+                    double leftDx = sec[0].X - prevSec[0].X;
+                    double leftDy = sec[0].Y - prevSec[0].Y;
+
+                    int rIdx = sec.Count - 1;
+                    double rightDx = sec[rIdx].X - prevSec[rIdx].X;
+                    double rightDy = sec[rIdx].Y - prevSec[rIdx].Y;
+
+                    // 内積によるベクトル反転チェック
+                    double dotL = origDx * leftDx + origDy * leftDy;
+                    double dotR = origDx * rightDx + origDy * rightDy;
+
+                    if (dotL < 0 || dotR < 0)
+                    {
+                        if (!hasIntersectionWarning)
+                        {
+                            hasIntersectionWarning = true;
+                            warningStation = leftLine[i].Station;
+                        }
+                    }
+                }
+
                 sections.Add(sec);
                 tengaiPnts.AddRange(sec);
+            }
+
+            // ★ 内カーブ破綻が検知された場合の警告ダイアログ処理
+            if (hasIntersectionWarning)
+            {
+                DialogResult result = MessageBox.Show(
+                    $"【警告：内カーブでの拡張破綻を検知】\n\n" +
+                    $"起点から約 {warningStation:F1} m 付近の急カーブ区間で、\n" +
+                    $"オフセット距離が大きすぎるため拡張面が自己交差・逆転しています。\n\n" +
+                    $"このままファイルを生成しますか？",
+                    "内カーブ拡張警告",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning
+                );
+
+                if (result == DialogResult.No)
+                {
+                    return false; // 中断
+                }
             }
 
             // 7. メッシュ（Faces）構築
@@ -428,7 +510,6 @@ namespace TengaiXMLApp
             return Math.Sqrt(dx * dx + dy * dy);
         }
 
-        // 複数サーフェスを一括でLandXMLに出力
         private static void SaveLandXml(string path, List<SurfaceData> surfaces)
         {
             StringBuilder sb = new StringBuilder();
